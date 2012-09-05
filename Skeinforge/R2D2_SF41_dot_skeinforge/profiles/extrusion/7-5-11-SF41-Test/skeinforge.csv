@@ -1,0 +1,9 @@
+Format is tab separated skeinforge settings.
+_Name                          	Value
+WindowPosition	664+25
+Open File for Skeinforge	/home/renosis/Downloads/screwing_box_perfect_top2.stl
+analyze	False
+craft	True
+help	False
+meta	False
+profile	False
