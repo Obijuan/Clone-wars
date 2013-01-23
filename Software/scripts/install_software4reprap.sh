@@ -63,7 +63,8 @@ ARDUINO_FILENAME=$ARDUINO_32bits_FILENAME
 ARDUINO_GIT_URL=git@github.com:arduino/Arduino.git
 
 CURA_URL=http://software.ultimaker.com/current
-CURA_FILENAME=Cura-12.10-linux.tar.gz
+#CURA_FILENAME=Cura-12.10-linux.tar.gz
+CURA_FILENAME=Cura-12.12-linux.tar.gz
 
 SLICER_URL=http://dl.slic3r.org/linux
 SLICER_32bits_FILENAME=slic3r-linux-x86-0-9-7.tar.gz
@@ -81,7 +82,7 @@ PYTHON26_DIR_DIST_PACKAGES=/usr/lib/python2.6/dist-packages/
 
 # Dependencies
 THIS_SCRIPT_DEPS="git unzip"
-CURA_DEPS="python-opengl"
+CURA_DEPS="python-opengl python-setuptools"
 SKEINFORGE_DEPS="python2.6"
 DEPENDENCIES="$THIS_SCRIPT_DEPS $CURA_DEPS $SKEINFORGE_DEPS"
 
@@ -186,6 +187,21 @@ function cloneOrUpdateGitRepo(){
 
 }
 
+function installCura{
+ # Entrada:
+ # $1: BASEDIR: Directorio base donde están instalados los binarios
+ # $2: CURA_GIT_URL: Url del repositorio git principal de Cura.
+ # $3: CURA_POWER_MODULE_GIT_URL: Url del repositorio de donde se recibirá el modulo Power para Python.
+    cloneOrUpdateGitRepo $1 "Cura" $2
+
+    git clone $3
+    cd Power
+    python setup.py build
+    echo "Es necesario acceder como root para poder instalar el módulo Power de Python."
+    sudo python setup.py install
+    cd -
+
+}
 
 #main(){
 
@@ -195,6 +211,8 @@ function cloneOrUpdateGitRepo(){
 ## This script expected behaviour should be to update the existing software. Not to replace it again and again, so.. Default: Disabled.
 ## Uncomment the next line to rename $BASEDIR before installing anything.
 #  backupDir $BASEDIR || exit 1
+
+  [ -d $BASEDIR ] || mkdir $BASEDIR
 
   ## Tools
 
@@ -235,7 +253,10 @@ function cloneOrUpdateGitRepo(){
   # tar -xzf /tmp/$FILENAME -C $BASEDIR || clean "$FILENAME"
 
   CURA_GIT_URL="git@github.com:daid/Cura.git"
-  cloneOrUpdateGitRepo $BASEDIR "Cura" $CURA_GIT_URL
+  CURA_POWER_MODULE_GIT_URL="https://github.com/GreatFruitOmsk/Power"
+  installCura $BASEDIR $CURA_GIT_URL $CURA_POWER_MODULE_GIT_URL
+
+
 
   # Slicer
   # Download a precompiled release.
