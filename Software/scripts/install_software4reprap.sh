@@ -37,7 +37,7 @@
 #      - Improve update functionality.
 #      - Install python 2.6.
 
-set -x
+#set -x
 
 ##########
 # CONFIGURATION
@@ -66,9 +66,18 @@ CURA_URL=http://software.ultimaker.com/current
 #CURA_FILENAME=Cura-12.10-linux.tar.gz
 CURA_FILENAME=Cura-12.12-linux.tar.gz
 
-SLICER_URL=http://dl.slic3r.org/linux
-SLICER_32bits_FILENAME=slic3r-linux-x86-0-9-7.tar.gz
-SLICER_64bits_FILENAME=slic3r-linux-x86_64-0-9-7.tar.gz
+PYPY_FILENAME=""
+PYPY_64bits_FILENAME=pypy-1.9-linux64.tar.bz2
+PYPY_URL= https://bitbucket.org/pypy/pypy/downloads
+
+# SLICER_URL=http://dl.slic3r.org/linux
+# SLICER_32bits_FILENAME=slic3r-linux-x86-0-9-8.tar.gz
+# SLICER_64bits_FILENAME=slic3r-linux-x86_64-0-9-8.tar.gz
+
+SLICER_URL=http://dl.slic3r.org/linux/old
+SLICER_32bits_FILENAME=slic3r-linux-x86-0-8-3.tar.gz
+SLICER_64bits_FILENAME=slic3r-linux-x86_64-0-8-3.tar.gz
+
 
 # # Old Slicer urls
 # SLICER_URL=http://dl.slic3r.org/linux/old
@@ -84,7 +93,8 @@ PYTHON26_DIR_DIST_PACKAGES=/usr/lib/python2.6/dist-packages/
 THIS_SCRIPT_DEPS="git unzip"
 CURA_DEPS="python-opengl python-setuptools"
 SKEINFORGE_DEPS="python2.6"
-DEPENDENCIES="$THIS_SCRIPT_DEPS $CURA_DEPS $SKEINFORGE_DEPS"
+SLICER_DEPS="build-essential libgtk2.0-dev libwxgtk2.8-dev libwx-perl libmodule-build-perl"
+DEPENDENCIES="$THIS_SCRIPT_DEPS $CURA_DEPS $SKEINFORGE_DEPS $SLICER_DEPS"
 
 # END OF CONFIGURATION.
 ############
@@ -92,7 +102,7 @@ DEPENDENCIES="$THIS_SCRIPT_DEPS $CURA_DEPS $SKEINFORGE_DEPS"
 # Configuring download urls depending on the kernel version.
 KERNEL=$(uname -r)
 echo "Kernel version detected: $KERNEL"
-(uname -r | grep amd64 > /dev/null) && ARDUINO_FILENAME=$ARDUINO_64bits_FILENAME && SLICER_FILENAME=$SLICER_64bits_FILENAME
+(uname -r | grep amd64 > /dev/null) && ARDUINO_FILENAME=$ARDUINO_64bits_FILENAME && SLICER_FILENAME=$SLICER_64bits_FILENAME && PYPY_FILENAME=$PYPY_64bits_FILENAME
 
 WHOAMI="$(who am i | cut -d \  -f 1)"
 
@@ -136,7 +146,7 @@ checkDependencies(){
 }
 
 # Renombra el directorio recibido por argumento añadiendo una marca de tiempo al nombre.
-backupDir(){
+function backupDir(){
 
     dir2backup=$1
     rc=0
@@ -171,12 +181,12 @@ backupDir(){
 #   # fi
 # }
 
+function cloneOrUpdateGitRepo(){
 # Clona o actualiza la copia local del repositorio
 # Arguments:
 # - $1: Basedir, where the repo will be cloned.
 # - $2: Name of the software. This have to be the same than the firectory name of the cloned repo. ie: Arduino. 
 # - $3: Git repo URL.
-function cloneOrUpdateGitRepo(){
 
     if [ -d $1/$2/.git ]; then
 	cd $1/$2
@@ -187,19 +197,94 @@ function cloneOrUpdateGitRepo(){
 
 }
 
-function installCura{
- # Entrada:
- # $1: BASEDIR: Directorio base donde están instalados los binarios
- # $2: CURA_GIT_URL: Url del repositorio git principal de Cura.
- # $3: CURA_POWER_MODULE_GIT_URL: Url del repositorio de donde se recibirá el modulo Power para Python.
-    cloneOrUpdateGitRepo $1 "Cura" $2
-
-    git clone $3
+# Module necesary to run Cura version >= 12.12
+function installPower(){
+    cloneOrUpdateGitRepo $1 "Power" $2
+#    git clone $3
     cd Power
     python setup.py build
     echo "Es necesario acceder como root para poder instalar el módulo Power de Python."
     sudo python setup.py install
-    cd -
+    cd ..
+}
+
+function installPypy(){
+
+    rc=1
+    
+  ######## SOLO PARA 64 bits : La versión inlcuida en Cura 12.12 es la versión 3e2 bits de pypy. Necesitamos descargar la versión 64 bits para ue Cura funcione correctamente.
+    [ -n $PYPY_FILENAME ] && {
+	[ -f /tmp/pypy-1.9-linux64.tar.bz2 ] || wget -P /tmp https://bitbucket.org/pypy/pypy/downloads/pypy-1.9-linux64.tar.bz2
+	mv pypy pypy_32
+	tar -xjf /tmp/pypy-1.9-linux64.tar.bz2
+	mv pypy-1.9 pypy
+    }
+
+    return $rc
+ 
+}
+
+function installCura(){
+ # Entrada:
+ # $1: BASEDIR: Directorio base donde están instalados los binarios
+ # $2: FILENAME
+ # $3: URL_MAIN
+ # $2: CURA_GIT_URL: Url del repositorio git principal de Cura.
+ # $3: CURA_POWER_MODULE_GIT_URL: Url del repositorio de donde se recibirá el modulo Power para Python.
+
+
+    ## Uncomment to download the source code.
+    ## Note: To build Cura it is necesarry cx-free: http://cx-freeze.sourceforge.net/
+    # cloneOrUpdateGitRepo $1 "Cura" $4
+
+
+  [ -f /tmp/$FILENAME ] || wget -P /tmp $URL_MAIN/$FILENAME
+  tar -xzf /tmp/$FILENAME -C $BASEDIR || clean "$FILENAME"
+
+  installPower $1 $5
+  cd $BASEDIR/$(echo $FILENAME | cut -d . -f 1,2)
+  installPypy
+
+}
+
+function requestConfirm(){
+# Return Values:
+## 0=YES
+## 1=NO
+
+    RC=1
+    VALUE=N
+    echo "Desea continuar? [y/N]"
+    read VALUE
+    [ -n "$VALUE" -a "$VALUE"="y" ] && RC=0
+    return $RC
+
+}
+
+function installSlic3r(){
+# Check for recomendations at installation time: http://slic3r.org/download
+
+    # # Through cloning git repo
+    # git clone git://github.com/alexrj/Slic3r
+    # cd Slic3r
+    # sudo perl Build.PL
+    # sudo cpan Wx
+
+    # Through downloading 
+  # Download a precompiled release.
+  URL_MAIN=$SLICER_URL
+  FILENAME=$SLICER_FILENAME
+  [ -d /$BASEDIR/Slic3r/ ] && {
+      echo "Ya existe una instalación de Slic3r."
+      echo "Se procederá a reinstalarlo."
+      requestConfirm
+      RC=$?
+  }
+  if [ -z "$?" -o "$RC" = "0" ]; then {
+          [ -f /tmp/$FILENAME ] || wget -P /tmp $URL_MAIN/$FILENAME
+	  tar -xzf /tmp/$FILENAME -C $BASEDIR || clean "$FILENAME"
+     }
+  fi;
 
 }
 
@@ -216,6 +301,9 @@ function installCura{
 
   ## Tools
 
+  # Slicer
+  installSlic3r
+
   # Printrun
 #  installPrintrun $BASEDIR $PRINTRUNDIR
   cloneOrUpdateGitRepo $BASEDIR "Printrun" $PRINTRUN_GIT_URL
@@ -230,11 +318,11 @@ function installCura{
   unzip -d $SKEINFORGEDIR /tmp/$FILENAME > /dev/null || clean "$FILENAME"
   ln -s $SKEINFORGEDIR/* $PRINTRUNDIR/
 
+   # Necesary to use system devices like /dev/ttyACM;"  
   echo "Es necesario crear un enlace para que funcione Pronterface con Skeinforge."
   echo "Añadir el usuario $WHOAMI al grupo dialout."
   echo "Para ello introduzca password de root:"
   su root - -c "ln -s $SKEINFORGEDIR /usr/lib/python2.6/dist-packages/skeinforge; adduser $WHOAMI dialout"
-   # Needed to use system devices like /dev/ttyACM;"  
 
   # Arduino
   cloneOrUpdateGitRepo $BASEDIR "Arduino" $ARDUINO_GIT_URL
@@ -247,23 +335,12 @@ function installCura{
   tar -xzf /tmp/$FILENAME -C $BASEDIR || clean "$FILENAME"
 
   # Cura
-  # URL_MAIN=$CURA_URL
-  # FILENAME=$CURA_FILENAME
-  # [ -f /tmp/$FILENAME ] || wget -P /tmp $URL_MAIN/$FILENAME
-  # tar -xzf /tmp/$FILENAME -C $BASEDIR || clean "$FILENAME"
+  URL_MAIN=$CURA_URL
+  FILENAME=$CURA_FILENAME
 
   CURA_GIT_URL="git@github.com:daid/Cura.git"
   CURA_POWER_MODULE_GIT_URL="https://github.com/GreatFruitOmsk/Power"
   installCura $BASEDIR $CURA_GIT_URL $CURA_POWER_MODULE_GIT_URL
-
-
-
-  # Slicer
-  # Download a precompiled release.
-  URL_MAIN=$SLICER_URL
-  FILENAME=$SLICER_FILENAME
-  [ -f /tmp/$FILENAME ] || wget -P /tmp $URL_MAIN/$FILENAME
-  tar -xzf /tmp/$FILENAME -C $BASEDIR || clean "$FILENAME"
 
   # Instructions http://slic3r.org/download
   #  SLICER_GIT_URL=git://github.com/alexrj/Slic3r   # Slic3er compilation - For later stages .. ;)
